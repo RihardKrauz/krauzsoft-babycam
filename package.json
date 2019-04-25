@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@material-ui/core": "^3.9.3",
+    "firebase": "^5.10.0",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
+    "react-router-dom": "^5.0.0",
     "react-scripts": "2.1.8"
   },
   "scripts": {
@@ -14,7 +17,57 @@
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
-    "extends": "react-app"
+    "extends": [
+      "react-app",
+      "eslint:recommended",
+      "plugin:react/recommended"
+    ],
+    "settings": {
+      "react": {
+        "createClass": "createReactClass",
+        "pragma": "React",
+        "version": "detect",
+        "flowVersion": "0.53"
+      },
+      "propWrapperFunctions": [
+        "forbidExtraProps",
+        {
+          "property": "freeze",
+          "object": "Object"
+        },
+        {
+          "property": "myFavoriteWrapper"
+        }
+      ]
+    },
+    "rules": {
+      "no-console": 0,
+      "prefer-destructuring": 2,
+      "no-param-reassign": 1,
+      "prefer-spread": 1,
+      "import/no-mutable-exports": 2,
+      "no-restricted-globals": 2,
+      "react/no-deprecated": 2,
+      "react/jsx-uses-react": "error",
+      "react/jsx-uses-vars": "error",
+      "react/prop-types": [
+        1,
+        {
+          "ignore": [
+            "history",
+            "dispatch",
+            "match",
+            "firebase",
+            "rtcClient"
+          ]
+        }
+      ]
+    },
+    "parserOptions": {
+      "ecmaFeatures": {
+        "jsx": true
+      }
+    }
   },
   "browserslist": [
     ">0.2%",
