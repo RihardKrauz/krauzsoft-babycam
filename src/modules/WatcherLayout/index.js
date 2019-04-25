@@ -1,13 +1,12 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { useCurrentUser } from '../../services/custom-hooks';
 
-const WatcherLayout = ({ firebase, rtcClient }) => {
-    const currentUser = useCurrentUser(firebase.auth);
+const CamWatcher = ({ firebase, rtcClient, camId, currentUser }) => {
+    // const currentUser = useCurrentUser(firebase.auth);
     let remoteVideoEl = React.useRef(null);
     let peerConnection;
-    let camId = '';
-    let activeCams = [];
-    let others;
+    // let camId = '';
     let unsubscribeMessageEvents;
     const clientId = Math.floor(Math.random() * 1000000000);
 
@@ -33,8 +32,6 @@ const WatcherLayout = ({ firebase, rtcClient }) => {
             console.log(event);
             remoteVideoEl.current.srcObject = event.stream;
         };
-
-        [camId, ...others] = await firebase.getActiveCamIdsByOwnerKey(currentUser.email);
 
         unsubscribeMessageEvents = firebase.getCamMessages(camId).onSnapshot(snapshot => {
             snapshot.docChanges().forEach(async change => {
@@ -64,6 +61,28 @@ const WatcherLayout = ({ firebase, rtcClient }) => {
             <video style={{ width: '300px', height: '200px' }} playsInline muted autoPlay ref={remoteVideoEl} />
             <button onClick={watchCam}>Start</button>
             <button onClick={stopWatching}>Stop</button>
+        </div>
+    );
+};
+
+CamWatcher.propTypes = {
+    camId: PropTypes.string.isRequired,
+    currentUser: PropTypes.object.isRequired
+};
+
+const WatcherLayout = ({ firebase, rtcClient }) => {
+    const [cams, setCams] = React.useState([]);
+    const currentUser = useCurrentUser(firebase.auth, user => {
+        (async u => {
+            const activeCams = await firebase.getActiveCamIdsByOwnerKey(u.email);
+            setCams(activeCams);
+        })(user);
+    });
+    return (
+        <div>
+            {cams.map(cam => (
+                <CamWatcher key={cam} firebase={firebase} rtcClient={rtcClient} camId={cam} currentUser={currentUser} />
+            ))}
         </div>
     );
 };
