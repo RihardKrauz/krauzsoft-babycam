@@ -1,7 +1,16 @@
 import React from 'react';
 import { useCurrentUser } from '../../services/custom-hooks';
+import PropTypes from 'prop-types';
+import { withStyles } from '@material-ui/core/styles';
+import Button from '@material-ui/core/Button';
 
-const LoginLayout = ({ history, firebase }) => {
+const styles = () => ({
+    button: {
+        margin: '1em'
+    }
+});
+
+const LoginLayout = ({ history, firebase, classes }) => {
     const currentUser = useCurrentUser(firebase.auth);
 
     async function signInWithGoogle() {
@@ -22,14 +31,28 @@ const LoginLayout = ({ history, firebase }) => {
 
     return (
         <>
-            <button onClick={signOut}>Logoff</button>
             {currentUser.email ? (
-                <button onClick={redirectToMode}>Continue as {currentUser.name}</button>
+                <div>
+                    <Button variant="outlined" color="primary" className={classes.button} onClick={redirectToMode}>
+                        Continue as {currentUser.name}
+                    </Button>
+                    <Button variant="outlined" className={classes.button} onClick={signOut}>
+                        Logoff
+                    </Button>
+                </div>
             ) : (
-                <button onClick={signInWithGoogle}>Login with Google</button>
+                <div>
+                    <Button variant="outlined" color="primary" className={classes.button} onClick={signInWithGoogle}>
+                        Login with Google
+                    </Button>
+                </div>
             )}
         </>
     );
 };
 
-export default LoginLayout;
+LoginLayout.propTypes = {
+    classes: PropTypes.object.isRequired
+};
+
+export default withStyles(styles)(LoginLayout);

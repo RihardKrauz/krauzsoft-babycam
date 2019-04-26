@@ -37,8 +37,10 @@ export default class Firebase {
     createCam = async ({ email }) =>
         await this.store
             .collection('cams')
-            .add({ email })
+            .add({ email, name: 'Unnamed' })
             .catch(console.error);
+
+    getCamRef = camId => this.store.collection('cams').doc(camId);
 
     getCamWatchers = camId =>
         this.store
@@ -70,5 +72,35 @@ export default class Firebase {
             .collection('cams')
             .doc(camId)
             .set({ isActive: value }, { merge: true });
+    };
+
+    setCamName = (camId, value) => {
+        this.store
+            .collection('cams')
+            .doc(camId)
+            .set({ name: value }, { merge: true });
+    };
+
+    getCamName = async camId => {
+        const doc = await this.store
+            .collection('cams')
+            .doc(camId)
+            .get();
+        if (doc.exists) {
+            const data = doc.data();
+            return data.name;
+        } else return null;
+    };
+
+    closeAllCamsByWatcherId = async watcherId => {
+        const camQuerySnapshot = await this.store
+            .collection('cams')
+            .where('email', '==', watcherId)
+            .where('isActive', '==', true)
+            .get()
+            .catch(console.error);
+        camQuerySnapshot.forEach(doc => {
+            doc.ref.set({ isActive: false }, { merge: true }).catch(console.error);
+        });
     };
 }

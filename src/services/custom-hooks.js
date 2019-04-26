@@ -18,7 +18,7 @@ const useCurrentUser = (authService, callback) => {
             return () => {};
         }
         authService.onAuthStateChanged(user => {
-            if (user.email) {
+            if (user && user.email) {
                 setUserForStateAndInitCallbackAction(user);
             } else {
                 setCurrentUser('');

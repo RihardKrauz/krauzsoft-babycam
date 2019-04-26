@@ -1,7 +1,16 @@
 import React from 'react';
 import { useCurrentUser } from '../../services/custom-hooks';
+import PropTypes from 'prop-types';
+import { withStyles } from '@material-ui/core/styles';
+import Button from '@material-ui/core/Button';
 
-const CamCreatingLayout = ({ history, firebase }) => {
+const styles = () => ({
+    button: {
+        margin: '1em'
+    }
+});
+
+const CamCreatingLayout = ({ history, firebase, classes }) => {
     const currentUser = useCurrentUser(firebase.auth, async user => {
         await createCamAndRedirect(user);
     });
@@ -21,9 +30,16 @@ const CamCreatingLayout = ({ history, firebase }) => {
 
     return (
         <div>
-            Creating a cam for {currentUser.name}...<button onClick={checkCurrentUserAndRunAction}>create</button>
+            <h2>Создаем камеру для {currentUser.name}...</h2>
+            <Button variant="outlined" className={classes.button} onClick={checkCurrentUserAndRunAction}>
+                Создать вручную
+            </Button>
         </div>
     );
 };
 
-export default CamCreatingLayout;
+CamCreatingLayout.propTypes = {
+    classes: PropTypes.object.isRequired
+};
+
+export default withStyles(styles)(CamCreatingLayout);

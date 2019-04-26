@@ -1,7 +1,29 @@
 import React from 'react';
+import PropTypes from 'prop-types';
+import { withStyles } from '@material-ui/core/styles';
+import Button from '@material-ui/core/Button';
+import Input from '@material-ui/core/Input';
 
-const CamLayout = ({ firebase, match, rtcClient }) => {
+const styles = () => ({
+    button: {
+        margin: '1em'
+    },
+    container: {
+        margin: '1em'
+    },
+    video: { width: '90%', margin: '1em' },
+    actionContainer: {
+        marginTop: '1em',
+        marginBottom: '1em'
+    },
+    actionButton: {
+        marginRight: '1em'
+    }
+});
+
+const CamLayout = ({ firebase, match, rtcClient, classes }) => {
     const [camNo, setCamNo] = React.useState('');
+    const [camName, setCamName] = React.useState('');
 
     let peerConnection;
     let localVideoEl = React.useRef(null);
@@ -10,11 +32,15 @@ const CamLayout = ({ firebase, match, rtcClient }) => {
     const clientId = Math.floor(Math.random() * 1000000000);
 
     React.useEffect(() => {
-        const camId = match.params.id;
-        if (camId) {
-            setCamNo(camId);
-            firebase.setCamActive(camId, false);
-        }
+        (async () => {
+            const camId = match.params.id;
+            if (camId) {
+                setCamNo(camId);
+                const name = await firebase.getCamName(camId);
+                setCamName(name);
+                firebase.setCamActive(camId, false);
+            }
+        })();
 
         return () => {
             unsubscribeEvent(unsubscribeWatcherEvents);
@@ -75,14 +101,32 @@ const CamLayout = ({ firebase, match, rtcClient }) => {
         peerConnection = null;
     }
 
+    function changeName() {
+        firebase.setCamName(camNo, camName);
+    }
+
     return (
-        <div style={{ width: '400px', height: '400px' }}>
-            <h3>Cam {camNo}</h3>
-            <video style={{ width: '300px', height: '200px' }} playsInline autoPlay muted ref={localVideoEl} />
-            <button onClick={startWatching}>Start</button>
-            <button onClick={stopWatching}>Stop</button>
+        <div className={classes.container}>
+            <h3>Камера: {camName}</h3>
+            <Input onChange={e => setCamName(e.target.value)} value={camName} />
+            <Button className={classes.button} onClick={changeName}>
+                Сохранить
+            </Button>
+            <div className={classes.actionContainer}>
+                <Button variant="outlined" color="primary" className={classes.actionButton} onClick={startWatching}>
+                    Start
+                </Button>
+                <Button variant="outlined" color="secondary" className={classes.actionButton} onClick={stopWatching}>
+                    Stop
+                </Button>
+            </div>
+            <video className={classes.video} playsInline autoPlay muted ref={localVideoEl} />
         </div>
     );
 };
 
-export default CamLayout;
+CamLayout.propTypes = {
+    classes: PropTypes.object.isRequired
+};
+
+export default withStyles(styles)(CamLayout);
