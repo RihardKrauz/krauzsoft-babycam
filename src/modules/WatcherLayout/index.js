@@ -14,13 +14,15 @@ const CamWatcher = ({ firebase, rtcClient, camId, currentUser }) => {
     const [camName, setCamName] = React.useState('');
     const [fullsize, setFullsize] = React.useState(false);
     const [isCamActive, setCamActive] = React.useState(false);
+    const [peerConnection, setPeerConnection] = React.useState(null);
+    const [unsubscribeMessageEvents, setUnsubscribeMessageEvents] = React.useState(null);
+    const [clientId, setClientId] = React.useState(0);
 
     let remoteVideoEl = React.useRef(null);
-    let peerConnection;
-    let unsubscribeMessageEvents;
-    const clientId = Math.floor(Math.random() * 1000000000);
 
     React.useEffect(() => {
+        setClientId(Math.floor(Math.random() * 1000000000));
+
         (async () => {
             if (camId) {
                 const name = await firebase.getCamName(camId);
@@ -40,24 +42,26 @@ const CamWatcher = ({ firebase, rtcClient, camId, currentUser }) => {
     }
 
     async function watchCam() {
-        peerConnection = new RTCPeerConnection();
-        peerConnection.onicecandidate = async event =>
+        const _peerConnection = new RTCPeerConnection();
+        _peerConnection.onicecandidate = async event =>
             event.candidate
                 ? await rtcClient.sendMessage(clientId, camId, JSON.stringify({ ice: event.candidate }), console.error)
                 : console.log('Sent All Ice');
-        peerConnection.onaddstream = event => {
+        _peerConnection.onaddstream = event => {
             console.log(event);
             remoteVideoEl.current.srcObject = event.stream;
         };
 
-        unsubscribeMessageEvents = firebase.getCamMessages(camId).onSnapshot(snapshot => {
-            snapshot.docChanges().forEach(async change => {
-                if (change.type === 'added') {
-                    console.log('Recieved msg...', change.doc.data());
-                    await rtcClient.readMessage(peerConnection, clientId, camId, change.doc.data());
-                }
-            });
-        });
+        setUnsubscribeMessageEvents(() =>
+            firebase.getCamMessages(camId).onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(async change => {
+                    if (change.type === 'added') {
+                        console.log('Recieved msg...', change.doc.data());
+                        await rtcClient.readMessage(_peerConnection, clientId, camId, change.doc.data());
+                    }
+                });
+            })
+        );
 
         firebase
             .getCamWatchers(camId)
@@ -65,6 +69,7 @@ const CamWatcher = ({ firebase, rtcClient, camId, currentUser }) => {
             .catch(console.error);
 
         setCamActive(true);
+        setPeerConnection(_peerConnection);
     }
 
     function stopWatching() {
@@ -73,7 +78,7 @@ const CamWatcher = ({ firebase, rtcClient, camId, currentUser }) => {
             unsubscribeEvent(unsubscribeMessageEvents);
 
             peerConnection.close();
-            peerConnection = null;
+            setPeerConnection(null);
         } catch (ex) {
             console.error(ex);
         }
