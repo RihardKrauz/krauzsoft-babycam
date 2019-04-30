@@ -2,10 +2,17 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { withStyles } from '@material-ui/core/styles';
 import Button from '@material-ui/core/Button';
-import Input from '@material-ui/core/Input';
+import TextField from '@material-ui/core/TextField';
 import Videocam from '@material-ui/icons/VideocamOutlined';
 import VideocamOff from '@material-ui/icons/VideocamOffOutlined';
+import DirectionsRun from '@material-ui/icons/DirectionsRun';
 import IconButton from '@material-ui/core/IconButton';
+import Checkbox from '@material-ui/core/Checkbox';
+
+import pixelmatch from 'pixelmatch';
+
+import { Subject } from 'rxjs';
+import { debounceTime, distinctUntilChanged, filter } from 'rxjs/operators';
 
 const styles = () => ({
     button: {
@@ -26,13 +33,25 @@ const styles = () => ({
 
 const CameraNamePanel = ({ camName, setCamName, onApply, classes }) => {
     return (
-        <>
-            <h3>Камера: {camName}</h3>
+        <div style={{ display: 'flex' }}>
+            {/* <h3>Камера: {camName}</h3>
             <Input onChange={e => setCamName(e.target.value)} value={camName} />
-            <Button className={classes.button} onClick={onApply}>
-                Сохранить
-            </Button>
-        </>
+             */}
+            <div>
+                <TextField
+                    id="standard-required"
+                    label="Камера"
+                    value={camName}
+                    onChange={e => setCamName(e.target.value)}
+                    margin="normal"
+                />
+            </div>
+            <div style={{ marginTop: '1em' }}>
+                <Button className={classes.button} onClick={onApply}>
+                    Сохранить
+                </Button>
+            </div>
+        </div>
     );
 };
 
@@ -61,6 +80,65 @@ RecordButton.propTypes = {
     onStopRecord: PropTypes.func
 };
 
+const RecordSettings = ({
+    isRecording,
+    onStartRecord,
+    onStopRecord,
+    sensivity,
+    setSensivityAction,
+    setTrackRecordingAction,
+    isMoveSpotted,
+    isVisible
+}) => {
+    const containerStyle = Object.assign({ display: 'flex' }, isVisible ? { opacity: '1' } : { opacity: '0' });
+    return (
+        <div style={containerStyle}>
+            <div>
+                <TextField
+                    id="standard-required"
+                    label="Sensivity"
+                    style={{ width: '100px' }}
+                    value={sensivity}
+                    onChange={setSensivityAction}
+                    margin="normal"
+                />
+            </div>
+            <div>
+                <div
+                    style={{
+                        fontSize: '12px',
+                        color: 'rgba(0, 0, 0, 0.54)',
+                        fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+                        marginTop: '1.3em'
+                    }}
+                >
+                    SaveOnMotion
+                </div>
+                <Checkbox id="cb-required" onChange={setTrackRecordingAction} margin="normal" />
+            </div>
+            <div style={{ marginTop: '2.3em', marginLeft: '1em' }}>
+                <RecordButton isRecording={isRecording} onStartRecord={onStartRecord} onStopRecord={onStopRecord} />
+                {isMoveSpotted && (
+                    <IconButton style={{ padding: '0.2em', marginLeft: '0.5em' }} color="primary">
+                        <DirectionsRun />
+                    </IconButton>
+                )}
+            </div>
+        </div>
+    );
+};
+
+RecordSettings.propTypes = {
+    isRecording: PropTypes.bool,
+    onStartRecord: PropTypes.func,
+    onStopRecord: PropTypes.func,
+    sensivity: PropTypes.any,
+    setSensivityAction: PropTypes.func,
+    setTrackRecordingAction: PropTypes.func,
+    isMoveSpotted: PropTypes.bool,
+    isVisible: PropTypes.bool
+};
+
 const CamLayout = ({ firebase, match, rtcClient, classes }) => {
     const [camNo, setCamNo] = React.useState('');
     const [camName, setCamName] = React.useState('');
@@ -72,11 +150,33 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
     const [unsubscribeWatcherEvents, setUnsubscribeWatcherEvents] = React.useState(null);
     const [unsubscribeMessageEvents, setUnsubscribeMessageEvents] = React.useState(null);
     const [allChunks, setAllChunks] = React.useState([]);
+    const [takeSnapshotsInterval, setTakeSnapshotsInterval] = React.useState(null);
+    const [isMoveSpotted, setMoveSpotted] = React.useState(false);
+    const [moveSensivity, setMoveSensivity] = React.useState(300);
+    const [input$, setInputSubject] = React.useState(null);
+    const [inputSubscription, setInputSubscription] = React.useState(null);
+    const [record$, setRecordSubject] = React.useState(null);
+    const [recordSubscription, setRecordSubscription] = React.useState(null);
+    const [trackRecordingTimer, setTrackRecordingTimer] = React.useState(null);
 
     let localVideoEl = React.useRef(null);
+    let prevShotCanvas = React.useRef(null);
+    let nextShotCanvas = React.useRef(null);
+    let diffCanvas = React.useRef(null);
 
     React.useEffect(() => {
+        const _input$ = new Subject();
+
         setClientId(Math.floor(Math.random() * 1000000000));
+        setInputSubject(_input$);
+        setInputSubscription(() =>
+            _input$
+                .pipe(
+                    debounceTime(300),
+                    distinctUntilChanged()
+                )
+                .subscribe(trackChanges)
+        );
 
         (async () => {
             const camId = match.params.id;
@@ -91,8 +191,20 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
         return () => {
             unsubscribeEvent(unsubscribeWatcherEvents);
             unsubscribeEvent(unsubscribeMessageEvents);
+            if (inputSubscription) {
+                inputSubscription.unsubscribe();
+            }
+            if (recordSubscription) {
+                inputSubscription.unsubscribe();
+            }
 
             firebase.setCamActive(camNo, false);
+            if (takeSnapshotsInterval) {
+                clearInterval(takeSnapshotsInterval);
+            }
+            if (trackRecordingTimer) {
+                clearInterval(trackRecordingTimer);
+            }
         };
     }, []);
 
@@ -115,6 +227,32 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
             localVideoEl.current.srcObject = userMediaStream;
             setLocalStream(userMediaStream);
             _peerConnection.addStream(userMediaStream);
+
+            const _record$ = new Subject();
+
+            let isTrackRecordingEmitted = false;
+            setRecordSubscription(() =>
+                _record$
+                    .pipe(
+                        filter(value => {
+                            return isTrackRecordingEmitted === false;
+                        })
+                    )
+                    .subscribe(() => {
+                        console.log('Record on move emitted');
+                        const recordResult = startRecord(userMediaStream);
+                        isTrackRecordingEmitted = true;
+                        setTrackRecordingTimer(() =>
+                            setTimeout(() => {
+                                console.log('Record on move completed');
+                                stopRecord(recordResult);
+                                isTrackRecordingEmitted = false;
+                            }, 3000)
+                        );
+                    })
+            );
+
+            setRecordSubject(_record$);
         }
 
         setUnsubscribeWatcherEvents(() =>
@@ -142,11 +280,19 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
 
         firebase.setCamActive(camNo, true);
         setPeerConnection(_peerConnection);
+        runTrackingChanges(moveSensivity);
     }
 
     function stopWatching() {
         unsubscribeEvent(unsubscribeWatcherEvents);
         unsubscribeEvent(unsubscribeMessageEvents);
+        if (takeSnapshotsInterval) {
+            clearInterval(takeSnapshotsInterval);
+        }
+        if (recordSubscription) {
+            inputSubscription.unsubscribe();
+        }
+
         firebase.setCamActive(camNo, false);
 
         localVideoEl.current.srcObject = null;
@@ -159,8 +305,10 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
         firebase.setCamName(camNo, camName);
     }
 
-    function startRecord() {
+    function startRecord(stream, autoChunks) {
+        const _stream = stream || localStream;
         let _recorder;
+        let _autoChunks = autoChunks || [];
         let options = { mimeType: 'video/webm;codecs=vp9' };
         if (!MediaRecorder.isTypeSupported(options.mimeType)) {
             console.error(`${options.mimeType} is not Supported`);
@@ -176,7 +324,7 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
         }
 
         try {
-            _recorder = new MediaRecorder(localStream, options);
+            _recorder = new MediaRecorder(_stream, options);
         } catch (e) {
             console.error('Exception while creating MediaRecorder:', e);
             return;
@@ -187,33 +335,36 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
         _recorder.onstop = event => {
             console.log('Recorder stopped: ', event);
         };
-        _recorder.ondataavailable = handleRecordDataAvailable;
+        _recorder.ondataavailable = event => {
+            if (event.data && event.data.size > 0) {
+                const chunks = autoChunks ? _autoChunks : allChunks;
+                chunks.push(event.data);
+                _autoChunks.push(event.data);
+                setAllChunks(chunks);
+            }
+        };
+
         _recorder.start(10); // collect 10ms of data
         console.log('MediaRecorder started', _recorder);
 
         setRecording(true);
         setRecorder(_recorder);
+        return { autoRecorder: _recorder, chunks: _autoChunks };
     }
 
-    function handleRecordDataAvailable(event) {
-        if (event.data && event.data.size > 0) {
-            const chunks = allChunks;
-            chunks.push(event.data);
-            setAllChunks(chunks);
-        }
-    }
-
-    function stopRecord() {
-        recorder.stop();
+    function stopRecord(recorderSetup) {
+        const currentRecorder = recorderSetup ? recorderSetup.autoRecorder : recorder;
+        const currentChunks = recorderSetup ? recorderSetup.chunks : allChunks;
+        currentRecorder.stop();
         setRecording(false);
-        console.log('Recorded Blobs: ', allChunks);
-        const blob = new Blob(allChunks, { type: 'video/webm' });
+        console.log('Recorded Blobs: ', currentChunks);
+        const blob = new Blob(currentChunks, { type: 'video/webm' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
         const now = new Date();
-        a.download = `camName_${now.getHours()}${now.getMinutes()}.webm`;
+        a.download = `${camName.replace(/\s/g, '_')}_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.webm`;
         document.body.appendChild(a);
         a.click();
         setRecorder(null);
@@ -224,21 +375,105 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
         }, 100);
     }
 
+    function takePrevShot() {
+        const lastCanvas = prevShotCanvas.current;
+        const lastCtx = lastCanvas.getContext('2d');
+        lastCtx.drawImage(localVideoEl.current, 0, 0, lastCanvas.width, lastCanvas.height);
+        return lastCtx;
+    }
+
+    function runTrackingChanges(sensivity, needRecord) {
+        let prevShot = takePrevShot();
+
+        setTakeSnapshotsInterval(() =>
+            setInterval(() => {
+                const newCanvas = nextShotCanvas.current;
+                const newCtx = newCanvas.getContext('2d');
+                newCtx.drawImage(localVideoEl.current, 0, 0, newCanvas.width, newCanvas.height);
+                const diffPixels = compareShots(prevShot, newCtx);
+                if (diffPixels > sensivity) {
+                    setMoveSpotted(true);
+                    if (needRecord === true) {
+                        record$.next(true);
+                    }
+                } else {
+                    setMoveSpotted(false);
+                }
+                prevShot = takePrevShot();
+            }, 1000)
+        );
+    }
+
+    function setSensivityAction(e) {
+        const value = Number(e.target.value ? e.target.value : 0);
+        if (isNaN(value)) {
+            console.error('Invalid input in sensivity');
+            return;
+        }
+
+        if (takeSnapshotsInterval) {
+            clearInterval(takeSnapshotsInterval);
+        }
+        setMoveSensivity(value);
+        input$.next(value);
+    }
+
+    function trackChanges(val) {
+        runTrackingChanges(val);
+    }
+
+    function compareShots(oldSnapshot, newSnapshot) {
+        const diffCtx = diffCanvas.current.getContext('2d');
+        const img1 = oldSnapshot.getImageData(0, 0, 640, 480);
+        const img2 = newSnapshot.getImageData(0, 0, 640, 480);
+        const diff = diffCtx.createImageData(640, 480);
+        const diffPixels = pixelmatch(img1.data, img2.data, diff.data, 640, 480, { threshold: 0.3 });
+
+        diffCtx.putImageData(diff, 0, 0);
+        return diffPixels;
+    }
+
     return (
         <div className={classes.container}>
             <CameraNamePanel camName={camName} setCamName={setCamName} onApply={changeName} classes={classes} />
             <div className={classes.actionContainer}>
-                <Button variant="outlined" color="primary" className={classes.actionButton} onClick={startWatching}>
-                    Start
-                </Button>
-                <Button variant="outlined" color="secondary" className={classes.actionButton} onClick={stopWatching}>
-                    Stop
-                </Button>
-                {peerConnection && (
-                    <RecordButton isRecording={isRecording} onStartRecord={startRecord} onStopRecord={stopRecord} />
-                )}
+                <div>
+                    <Button variant="outlined" color="primary" className={classes.actionButton} onClick={startWatching}>
+                        Start
+                    </Button>
+                    <Button
+                        variant="outlined"
+                        color="secondary"
+                        className={classes.actionButton}
+                        onClick={stopWatching}
+                    >
+                        Stop
+                    </Button>
+                </div>
+                <RecordSettings
+                    isRecording={isRecording}
+                    onStartRecord={() => startRecord()}
+                    onStopRecord={() => stopRecord()}
+                    sensivity={moveSensivity}
+                    setSensivityAction={setSensivityAction}
+                    isMoveSpotted={isMoveSpotted}
+                    isVisible={!!peerConnection}
+                    setTrackRecordingAction={e => {
+                        const value = e.target.checked;
+                        if (takeSnapshotsInterval) {
+                            clearInterval(takeSnapshotsInterval);
+                        }
+                        runTrackingChanges(moveSensivity, value);
+                    }}
+                />
             </div>
             <video className={classes.video} playsInline autoPlay muted ref={localVideoEl} />
+
+            <section style={{ display: 'none' }}>
+                <canvas className={classes.video} ref={prevShotCanvas} />
+                <canvas className={classes.video} ref={nextShotCanvas} />
+                <canvas className={classes.video} ref={diffCanvas} />
+            </section>
         </div>
     );
 };
