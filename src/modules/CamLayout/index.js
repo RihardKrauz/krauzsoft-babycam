@@ -2,19 +2,16 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { withStyles } from '@material-ui/core/styles';
 import Button from '@material-ui/core/Button';
-import TextField from '@material-ui/core/TextField';
-import Videocam from '@material-ui/icons/VideocamOutlined';
-import VideocamOff from '@material-ui/icons/VideocamOffOutlined';
-import DirectionsRun from '@material-ui/icons/DirectionsRun';
-import IconButton from '@material-ui/core/IconButton';
-import Checkbox from '@material-ui/core/Checkbox';
 
 import pixelmatch from 'pixelmatch';
 
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter } from 'rxjs/operators';
 
-const styles = () => ({
+import CameraNamePanel from './CameraNamePanel';
+import RecordSettings from './RecordSettings';
+
+const layoutStyles = () => ({
     button: {
         margin: '1em'
     },
@@ -30,114 +27,6 @@ const styles = () => ({
         marginRight: '1em'
     }
 });
-
-const CameraNamePanel = ({ camName, setCamName, onApply, classes }) => {
-    return (
-        <div style={{ display: 'flex' }}>
-            {/* <h3>Камера: {camName}</h3>
-            <Input onChange={e => setCamName(e.target.value)} value={camName} />
-             */}
-            <div>
-                <TextField
-                    id="standard-required"
-                    label="Камера"
-                    value={camName}
-                    onChange={e => setCamName(e.target.value)}
-                    margin="normal"
-                />
-            </div>
-            <div style={{ marginTop: '1em' }}>
-                <Button className={classes.button} onClick={onApply}>
-                    Сохранить
-                </Button>
-            </div>
-        </div>
-    );
-};
-
-CameraNamePanel.propTypes = {
-    camName: PropTypes.string,
-    setCamName: PropTypes.func,
-    onApply: PropTypes.func,
-    classes: PropTypes.object
-};
-
-const RecordButton = ({ isRecording, onStartRecord, onStopRecord }) => {
-    return !isRecording ? (
-        <IconButton style={{ padding: '0.2em' }} color="default" onClick={onStartRecord}>
-            <VideocamOff />
-        </IconButton>
-    ) : (
-        <IconButton style={{ padding: '0.2em' }} color="secondary" onClick={onStopRecord}>
-            <Videocam />
-        </IconButton>
-    );
-};
-
-RecordButton.propTypes = {
-    isRecording: PropTypes.bool,
-    onStartRecord: PropTypes.func,
-    onStopRecord: PropTypes.func
-};
-
-const RecordSettings = ({
-    isRecording,
-    onStartRecord,
-    onStopRecord,
-    sensivity,
-    setSensivityAction,
-    setTrackRecordingAction,
-    isMoveSpotted,
-    isVisible
-}) => {
-    const containerStyle = Object.assign({ display: 'flex' }, isVisible ? { opacity: '1' } : { opacity: '0' });
-    return (
-        <div style={containerStyle}>
-            <div>
-                <TextField
-                    id="standard-required"
-                    label="Sensivity"
-                    style={{ width: '100px' }}
-                    value={sensivity}
-                    onChange={setSensivityAction}
-                    margin="normal"
-                />
-            </div>
-            <div>
-                <div
-                    style={{
-                        fontSize: '12px',
-                        color: 'rgba(0, 0, 0, 0.54)',
-                        fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-                        marginTop: '1.3em'
-                    }}
-                >
-                    SaveOnMotion
-                </div>
-                <Checkbox id="cb-required" onChange={setTrackRecordingAction} margin="normal" />
-            </div>
-            <div style={{ marginTop: '2.3em', marginLeft: '1em' }}>
-                <RecordButton isRecording={isRecording} onStartRecord={onStartRecord} onStopRecord={onStopRecord} />
-                {isMoveSpotted && (
-                    <IconButton style={{ padding: '0.2em', marginLeft: '0.5em' }} color="primary">
-                        <DirectionsRun />
-                    </IconButton>
-                )}
-            </div>
-        </div>
-    );
-};
-
-RecordSettings.propTypes = {
-    isRecording: PropTypes.bool,
-    onStartRecord: PropTypes.func,
-    onStopRecord: PropTypes.func,
-    sensivity: PropTypes.any,
-    setSensivityAction: PropTypes.func,
-    setTrackRecordingAction: PropTypes.func,
-    isMoveSpotted: PropTypes.bool,
-    isVisible: PropTypes.bool
-};
 
 const CamLayout = ({ firebase, match, rtcClient, classes }) => {
     const [camNo, setCamNo] = React.useState('');
@@ -163,6 +52,8 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
     let prevShotCanvas = React.useRef(null);
     let nextShotCanvas = React.useRef(null);
     let diffCanvas = React.useRef(null);
+
+    let recordCount = 0;
 
     React.useEffect(() => {
         const _input$ = new Subject();
@@ -364,7 +255,10 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
         a.style.display = 'none';
         a.href = url;
         const now = new Date();
-        a.download = `${camName.replace(/\s/g, '_')}_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.webm`;
+        a.download = `${camName.replace(
+            /\s/g,
+            '_'
+        )}_${++recordCount}_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.webm`;
         document.body.appendChild(a);
         a.click();
         setRecorder(null);
@@ -435,7 +329,7 @@ const CamLayout = ({ firebase, match, rtcClient, classes }) => {
 
     return (
         <div className={classes.container}>
-            <CameraNamePanel camName={camName} setCamName={setCamName} onApply={changeName} classes={classes} />
+            <CameraNamePanel camName={camName} setCamName={setCamName} onApply={changeName} />
             <div className={classes.actionContainer}>
                 <div>
                     <Button variant="outlined" color="primary" className={classes.actionButton} onClick={startWatching}>
@@ -482,4 +376,4 @@ CamLayout.propTypes = {
     classes: PropTypes.object.isRequired
 };
 
-export default withStyles(styles)(CamLayout);
+export default withStyles(layoutStyles)(CamLayout);
